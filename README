@@ -1,0 +1,2 @@
+python3  main.py --model resnet18 --dataset CIFAR10 --batch_size 128
+python3  main.py --model resnet18 --dataset IMAGENET --batch_size 128
