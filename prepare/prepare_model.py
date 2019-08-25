@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
 
 
 class Net_mnist(nn.Module):
@@ -123,3 +124,5 @@ def prepare_model(args=None):
             return ResNet18(1)
         if args.dataset == 'CIFAR10':
             return ResNet18()
+        if args.dataset == 'IMAGENET':
+            return torchvision.models.resnet18(pretrained=True)

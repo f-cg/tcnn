@@ -44,6 +44,7 @@ def save_metric():
 
 
 net = prepare_model(args).to(device)
+train_test(net, valloader, classes=1000, train_flag=False, cols=6)
 pre_dir = os.path.join(drive, 'train_cnn/{}_trained'.format(args.dataset))
 # id_name = '{}_{}_{}'.format(args.dataset, args.model, args.optim)
 

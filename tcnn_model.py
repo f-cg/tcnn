@@ -226,11 +226,18 @@ class SoftDecisionTree(nn.Module):
             *ml[1:3]), nn.Sequential(*ml[3:5]),
             nn.Sequential(Flatten(), ml[5]), ml[6]]
         if args.model == 'resnet18':
-            self.args.modules = [nn.Sequential(
-                net.conv1, net.bn1, nn.ReLU(), net.layer1),
-                net.layer2, net.layer3,
-                nn.Sequential(net.layer4, nn.AvgPool2d(4)),
-                nn.Sequential(Flatten(), net.linear)]
+            if args.dataset == 'IMAGENET':
+                self.args.modules = [nn.Sequential(
+                    net.conv1, net.bn1, nn.ReLU(), net.maxpool, net.layer1),
+                    net.layer2, net.layer3,
+                    nn.Sequential(net.layer4, net.avgpool),
+                    nn.Sequential(Flatten(), net.fc)]
+            else:
+                self.args.modules = [nn.Sequential(
+                    net.conv1, net.bn1, nn.ReLU(), net.layer1),
+                    net.layer2, net.layer3,
+                    nn.Sequential(net.layer4, nn.AvgPool2d(4)),
+                    nn.Sequential(Flatten(), net.linear)]
         elif args.model == 'naive':
             self.args.modules = [
                 nn.Sequential(net.conv1, nn.Sigmoid(), net.mp1),
@@ -274,8 +281,16 @@ class SoftDecisionTree(nn.Module):
             else:
                 print('dataset and model not match')
                 exit(0)
+        elif args.dataset == 'IMAGENET':
+            if args.model == 'resnet18':
+                self.args.module_oshape = [
+                    (64, 56, 56), (128, 28, 28), (256, 14, 14), (512, 1, 1), 1000]
+                args.max_depth = 5
+            else:
+                print('dataset and model not match')
+                exit(0)
         else:
-            print(args.dataset)
+            print('no such dataset:', args.dataset)
             exit(-1)
 
         self.root = InnerNode(1, self.args)
