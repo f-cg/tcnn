@@ -1,0 +1,1 @@
+{True: {'class_accs': [], 'total_acc': []}, False: {'class_accs': [array([  0.,   0.,   0., 100.,   0.,   0.,   0.,   0.,   0.,   0.])], 'total_acc': [10.0]}}
