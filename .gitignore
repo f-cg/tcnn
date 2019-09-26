@@ -1,2 +1,6 @@
 */*.pyc
 *__pycache__
+tcnn_saved
+cnn_saved
+*.mt
+*.pt
