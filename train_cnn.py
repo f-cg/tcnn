@@ -14,24 +14,22 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # Should make training go faster for large models
 torch.backends.cudnn.benchmark = True
 
-metric_saved = {True: {'class_accs': [], 'total_acc': []},
-                False: {'class_accs': [], 'total_acc': []}}
+metric_saved = {'train': {'class_accs': [], 'total_acc': []},
+                'val': {'class_accs': [], 'total_acc': []},
+                'test': {'class_accs': [], 'total_acc': []}}
 
-args = parse_args()
+args = parse_args('cnn')
 torch.manual_seed(args.seed)
 
 saved_dir = './cnn_saved/{}_trained'.format(args.dataset)
-id_name = '{}_{}_{}'.format(args.dataset, args.model, args.optim)
-if args.dropout:
-    id_name += 'dropout'
 
 bestmodelstate, testloader, bestepoch, model = None, None, None, None
 
 
 def save_metric():
-    with open(os.path.join(saved_dir, id_name), 'wt') as f:
+    with open(os.path.join(saved_dir, args.id_name), 'wt') as f:
         print(metric_saved, file=f)
-    save_file = '{}_epoch{}.pt'.format(id_name, bestepoch)
+    save_file = '{}_epoch{}.pt'.format(args.id_name, bestepoch)
     torch.save(bestmodelstate, os.path.join(saved_dir, save_file))
 
     model.load_state_dict(bestmodelstate)
@@ -66,6 +64,7 @@ def main():
     print(device)
     os.path.exists(saved_dir) or os.makedirs(saved_dir)
     trainloader, valloader, testloader = prepare_dataloader(args)
+    print(testloader.dataset)
     model = prepare_model(args).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer, scheduler = get_optim(args, model)
@@ -80,6 +79,7 @@ def main():
                             metric_saved=metric_saved, mode='val')
         if valacc > best_valacc:
             best_valacc = valacc
+            bestepoch = epoch
             bestmodelstate = model.state_dict()
             print('another best valacc:{:.2f}'.format(valacc))
 

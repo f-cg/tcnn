@@ -125,4 +125,10 @@ def prepare_model(args=None):
         if args.dataset == 'CIFAR10':
             return ResNet18()
         if args.dataset == 'IMAGENET':
-            return torchvision.models.resnet18(pretrained=True)
+            model = torchvision.models.resnet18(pretrained=True)
+            return model
+        if args.dataset == 'IMAGENETSUBSET':
+            model = torchvision.models.resnet18(pretrained=True)
+            num_ftrs = model.fc.in_features
+            model.fc = nn.Linear(num_ftrs, 16)
+            return model

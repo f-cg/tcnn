@@ -1,2 +1,13 @@
-python3  main.py --model resnet18 --dataset CIFAR10 --batch_size 128
-python3  main.py --model resnet18 --dataset IMAGENET --batch_size 128
+## 预训练
+python3 train_cnn.py --model naive --dataset MNIST --batch_size 128
+python3 train_cnn.py --model resnet18 --dataset CIFAR10 --batch_size 128
+python3 train_cnn.py --model resnet18 --dataset IMAGENETSUBSET --batch_size 128 --data_dir /data/imagenetsubset --lr 1e-5
+
+## 训练tcnn
+```sh
+#测试通过
+python3  main.py --model naive --dataset MNIST --batch_size 128 --load_pretrain=MNIST_naive_Adam_epoch30.pt 
+python3  main.py --model resnet18 --dataset CIFAR10 --batch_size 128 --load_pretrain=CIFAR10_resnet18_Adam_epoch19.pt --lr 1e-4
+#测试未通过
+python3  main.py --model resnet18 --dataset IMAGENETSUBSET --batch_size 128 --data_dir /data/imagenetsubset --lr 1e-5 --load_pretrain IMAGENETSUBSET_resnet18_Adam_epoch22.pt
+```

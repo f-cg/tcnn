@@ -1,6 +1,7 @@
 import getpass
 import os
 import time
+from os.path import join
 
 import torch
 
@@ -28,31 +29,32 @@ train_loader, valloader, test_loader = prepare_dataloader(args)
 
 
 def save_metric():
-    if best_epoch < 2:
-        print('nothing saved')
-        return
-    saved_name = os.path.join(
-        drive, 'tcnn_saved', args.saved_name+date+'_'+str(best_epoch))
+    saved_dir = join(drive, 'tcnn_saved')
+    oldmetrics = os.listdir(saved_dir)
+    oldmetrics = [s for s in oldmetrics if s.startswith(args.id_name+date)]
+    saved_name = join(saved_dir, args.id_name+date+'_'+str(best_epoch))
     with open(saved_name+'.mt', 'wt') as f:
         print(metric_saved, file=f)
     torch.save(best_state, saved_name+'.pt')
+    for om in oldmetrics:
+        os.remove(join(saved_dir, om))
 
-    model.load_state_dict(best_state)
-    testacc = model.train_(
-        test_loader, None, args.n_classes, train_flag=False, hard=True)
-    print('final test acc:{:.2f}'.format(testacc))
+#    model.load_state_dict(best_state)
+#    testacc = model.train_(
+#        test_loader, None, args.n_classes, train_flag=False, hard=True)
+#    print('final test acc:{:.2f}'.format(testacc))
 
 
 net = prepare_model(args).to(device)
-train_test(net, valloader, classes=1000, train_flag=False, cols=6)
-pre_dir = os.path.join(drive, 'train_cnn/{}_trained'.format(args.dataset))
+# train_test(net, valloader, classes=1000, train_flag=False, cols=6)
+pre_dir = join(drive, './cnn_saved/{}_trained'.format(args.dataset))
 # id_name = '{}_{}_{}'.format(args.dataset, args.model, args.optim)
 
 if args.load_pretrain != 'None':
-    pretrain = os.path.join(pre_dir, args.load_pretrain)
+    pretrain = join(pre_dir, args.load_pretrain)
     net.load_state_dict(torch.load(pretrain))
     print('preload net precision:')
-    train_test(net, test_loader, args.n_classes, train_flag=False)
+    train_test(net, valloader, args.n_classes, train_flag=False)
 
 model = SoftDecisionTree(args, net).to(device)
 print(count_parameters(model))
@@ -64,12 +66,12 @@ metric_saved = {'train': {'class_accs': [], 'hard_class_accs': [], 'total_acc': 
                 'nonezero': [],
                 'fr_leaves': []}  # (epochs,16,10)
 metric_saved['args'] = str(args)
-model.train_(test_loader, None, args.n_classes, train_flag=False)
+#model.train_(valloader, None, args.n_classes, train_flag=False)
 best_valacc, best_epoch, best_state = 0, 0, None
 
 
 def main():
-    global best_valacc, best_state
+    global best_valacc, best_epoch, best_state
     for epoch in range(1, args.epochs + 1):
         if args.unfreeze == epoch:
             model.freeze(False)
@@ -100,12 +102,9 @@ def main():
         if valacc > best_valacc:
             best_state = model.state_dict()
             best_valacc = valacc
+            best_epoch = epoch
             print('another best valacc:{:.2f}'.format(valacc))
+            save_metric()
 
 
-try:
-    main()
-except KeyboardInterrupt:
-    save_metric()
-    exit(0)
-save_metric()
+main()

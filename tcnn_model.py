@@ -1,6 +1,6 @@
 import getpass
 import operator
-import pdb
+#import pdb
 import time
 from copy import deepcopy
 from functools import reduce
@@ -10,13 +10,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch import autograd
+import torchvision
 
 user_name = getpass.getuser()
 drive = './' if user_name == 'lily' else '/gdrive/My Drive/'
 np.set_printoptions(precision=3, suppress=True)
-
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+print(device)
 leafid = 0
 nodeid = 0
 leaves = []
@@ -37,6 +37,8 @@ class Flatten(nn.Module):
 class InnerNode():
 
     def __init__(self, depth, args):
+        m = torchvision.models.resnet18(pretrained=True)
+        m = m.to(device)
         self.args = args
         self.module = deepcopy(args.modules[depth-1])
         oflatten = args.module_oshape[depth-1]
@@ -77,17 +79,29 @@ class InnerNode():
         xo = self.module(x)
         x = xo.view(xo.shape[0], -1)
         rprob = F.sigmoid(self.beta*self.fc(x))
-        if torch.isnan(rprob).any():
-            print(self.depth)
-            print('self.beta:')
-            print(self.beta)
-            print('x:')
-            print(x)
-            print('self.fc(x):')
-            print(self.fc(x))
-            print('rprob:')
-            print(rprob)
-            pdb.set_trace()
+#        if torch.isnan(rprob).any():
+#            print(self.depth)
+#            print('self.beta:')
+#            print(self.beta)
+#            print('x:')
+#            print(x)
+#            print('self.fc(x):')
+#            print(self.fc(x))
+#            print('rprob:')
+#            print(rprob)
+#        if torch.isnan(self.fc.weight).any():
+#            print('fc.weight')
+#            print(self.fc.weight)
+#            exit(-1)
+#        if torch.isnan(self.fc.bias).any():
+#            print('fc.bias')
+#            print(self.fc.bias)
+#            exit(-1)
+#        if torch.isnan(self.beta).any():
+#            print('beta')
+#            print(self.beta)
+#            exit(-1)
+        # pdb.set_trace()
         return(rprob, xo)
 
     def forward_hook(self, x):
@@ -125,7 +139,7 @@ class InnerNode():
         self.right.inferrence(xo, rp)
 
     def inferrence_hook(self, x, path_prob, hooknode):
-        print('nodeid depth', self.nodeid, hooknode, self.depth)
+        #        print('nodeid depth', self.nodeid, hooknode, self.depth)
         if self.nodeid == hooknode:
             p, xo = self.forward_hook(x)
             return (xo, p)
@@ -220,13 +234,18 @@ class SoftDecisionTree(nn.Module):
     def __init__(self, args, net):
         super(SoftDecisionTree, self).__init__()
         self.args = args
-        self.args.output_dim = 10
         ml = list(net.modules())
         self.args.modules = [nn.Sequential(
             *ml[1:3]), nn.Sequential(*ml[3:5]),
             nn.Sequential(Flatten(), ml[5]), ml[6]]
         if args.model == 'resnet18':
             if args.dataset == 'IMAGENET':
+                self.args.modules = [nn.Sequential(
+                    net.conv1, net.bn1, nn.ReLU(), net.maxpool, net.layer1),
+                    net.layer2, net.layer3,
+                    nn.Sequential(net.layer4, net.avgpool),
+                    nn.Sequential(Flatten(), net.fc)]
+            elif args.dataset == 'IMAGENETSUBSET':
                 self.args.modules = [nn.Sequential(
                     net.conv1, net.bn1, nn.ReLU(), net.maxpool, net.layer1),
                     net.layer2, net.layer3,
@@ -289,8 +308,16 @@ class SoftDecisionTree(nn.Module):
             else:
                 print('dataset and model not match')
                 exit(0)
+        elif args.dataset == 'IMAGENETSUBSET':
+            if args.model == 'resnet18':
+                self.args.module_oshape = [
+                    (64, 56, 56), (128, 28, 28), (256, 14, 14), (512, 1, 1), 16]
+                args.max_depth = 5
+            else:
+                print('dataset and model not match')
+                exit(0)
         else:
-            print('no such dataset:', args.dataset)
+            raise ValueError('no such dataset:'+args.dataset)
             exit(-1)
 
         self.root = InnerNode(1, self.args)
@@ -339,23 +366,23 @@ class SoftDecisionTree(nn.Module):
         loss = 0.
 #        max_prob = [-1. for _ in range(batch_size)]
         max_prob = [-1]*batch_size
-#        max_Q = [torch.zeros(self.args.output_dim)
-#                 for _ in range(batch_size)]
-        max_Q = [0]*batch_size
+        max_Q = [torch.zeros(self.args.output_dim)
+                 for _ in range(batch_size)]
+        #max_Q = [0]*batch_size
+        # print(batch_size)
         for (path_prob, Q) in leaf_accumulator:
             TQ = torch.bmm(y.view(batch_size, 1, self.args.output_dim), torch.log(
                 Q).view(batch_size, self.args.output_dim, 1)).view(-1, 1)  # 交叉熵
             loss += path_prob * TQ  # 该叶节点处的概率乘以TQ
             path_prob_numpy = path_prob.cpu().data.numpy().reshape(-1)
             for i in range(batch_size):
-                #                try:
-                #                    assert(path_prob[i] >= 0)
-                #                except:
-                #                    print(leaf_accumulator)
-                #                    print(path_prob[i] < 0)
-                #                    print(path_prob[i] >= 0)
-                #                    exit(-1)
-                #
+                try:
+                    assert(path_prob[i] >= 0)
+                except:
+                    print('leaf_accumulator:', leaf_accumulator)
+                    print('path_prob[i]:', path_prob[i])
+                    exit(-1)
+
                 if max_prob[i] < path_prob_numpy[i]:
                     max_prob[i] = path_prob_numpy[i]
                     max_Q[i] = Q[i]
@@ -366,14 +393,25 @@ class SoftDecisionTree(nn.Module):
             C -= lmbda * 0.5 * (torch.log(penalty) + torch.log(1-penalty))
 #        for mq in max_Q:
 #            print(mq.device, end=' ')
-        output = torch.stack(max_Q)
+        try:
+            output = torch.stack(max_Q)
+        except:
+            print('max_Q:', max_Q)
+            print('loss:', loss)
+
         self.root.reset()  # reset all stacked calculation
         # -log(loss) will always output non, because loss is always below zero.
         # I suspect this is the mistake of the paper?
+#        print(-loss+C, output)
+#        if torch.isinf(-loss+C).any():
+#            print('loss is inf')
+#            print(-loss+C, output)
+#            exit(-1)
         return(-loss + C, output)
         return(-loss, output)
 
     def cal_loss_hard(self, x, y):
+        # print('cal_loss_hard')
         batch_size = y.size()[0]
         leaf_accumulator = self.root.cal_prob_hard(
             x, self.path_prob_init)  # (leaf_nums, )
@@ -513,10 +551,18 @@ class SoftDecisionTree(nn.Module):
         print('single_test acc:{:.3f}'.format(correct/total))
         return node_probs
 
+    def check_nan(self):
+        params_vector = torch.nn.utils.parameters_to_vector(self.parameters())
+        if torch.isnan(params_vector).any():
+            print('find nan in params')
+            exit(-1)
+        return
+
     def train_(self, loader, metric_saved, classes, stage_print=True,
                train_flag=True, hard=True, save_target_on_leaves_=True,
                mode='test'):
         t1 = time.time()
+        # self.check_nan()
         if train_flag:
             self.train()
         else:
@@ -535,9 +581,10 @@ class SoftDecisionTree(nn.Module):
             global prob_on_leaves, save_target_on_leaves
             save_target_on_leaves = True
             prob_on_leaves = [0]*2**self.args.max_depth
-            fr_leaves = [[0]*10 for _ in range(2**self.args.max_depth)]
+            fr_leaves = [[0]*classes for _ in range(2**self.args.max_depth)]
 
         for batch_idx, (data, target) in enumerate(loader):
+            #            print('batch_idx', batch_idx)
             data, target = data.to(device), target.to(device)
             target_ = target.view(-1, 1)
             batch_size = target_.size()[0]
@@ -547,15 +594,17 @@ class SoftDecisionTree(nn.Module):
             if not batch_size == self.args.batch_size:
                 self.define_extras(batch_size)
             self.target_onehot.zero_()
+#            print(target.shape)
+#            print(target)
+#            print(self.target_onehot)
             self.target_onehot.scatter_(1, target_, 1.)
             # Soft
             if train_flag:
                 self.optimizer.zero_grad()
             loss, output = self.cal_loss(data, self.target_onehot)
             if train_flag:
-                with autograd.detect_anomaly():
-                    loss.backward()
-                    self.optimizer.step()
+                loss.backward()
+                self.optimizer.step()
             # get the index of the max log-probability
             pred = output.data.max(1)[1]
 #            if output.device == 'cpu':
@@ -572,7 +621,7 @@ class SoftDecisionTree(nn.Module):
             if hard:
                 loss, output = self.cal_loss_hard(data, self.target_onehot)
                 pred = output.data.max(1)[1]
-                c = pred.eq(target.data).cpu()
+                c = pred.cpu().eq(target.data.cpu())
                 hard_correct += c.sum()
                 for i in range(len(target)):
                     label = target[i]
@@ -592,6 +641,7 @@ class SoftDecisionTree(nn.Module):
 #                    total_acc, hard_total_acc))
         # Soft
         total_acc = 100. * correct.item() / total_count
+        print(correct.item(), total_count)
         class_correct = class_correct.numpy()
         class_accs = 100*class_correct/class_total
         if metric_saved:
@@ -615,5 +665,5 @@ class SoftDecisionTree(nn.Module):
             summary = '{}%:{:.2f} time:{:.2f}s'.format(
                 mode, total_acc, t)
 
-        print(summary)
+        print(time.strftime('%H:%M %D'), summary)
         return total_acc

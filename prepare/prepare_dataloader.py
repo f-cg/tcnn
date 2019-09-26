@@ -15,14 +15,18 @@ def prepare_dataloader(args):
     if args.dataset == 'SVHN':
         normalize = transforms.Normalize(mean=[x / 255.0 for x in [109.9, 109.7, 113.8]],
                                          std=[x / 255.0 for x in [50.1, 50.6, 50.8]])
-    elif args.dataset == 'IMAGENET':
+    elif args.dataset in ['IMAGENET', 'IMAGENETSUBSET']:
         # valdir = (args.data, 'val')
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
 
-    else:
+    elif args.dataset == 'CIFAR10':
         normalize = transforms.Normalize(mean=[x / 255.0 for x in [125.3, 123.0, 113.9]],
                                          std=[x / 255.0 for x in [63.0, 62.1, 66.7]])
+    elif args.dataset == 'MNIST':
+        normalize = transforms.Normalize((0.1307,), (0.3081,))
+    else:
+        raise ValueError('no such dataset:'+args.dataset)
 
     preprocess = [transforms.ToTensor(), normalize]
     train_transformers = []
@@ -35,7 +39,7 @@ def prepare_dataloader(args):
                 transforms.RandomCrop(32, padding=4),
                 transforms.RandomHorizontalFlip()
             ]
-        elif args.dataset in ['IMAGENET']:
+        elif args.dataset in ['IMAGENET', 'IMAGENETSUBSET']:
             augment = [
                 transforms.RandomResizedCrop(224),
                 transforms.RandomHorizontalFlip(),
@@ -45,13 +49,13 @@ def prepare_dataloader(args):
     train_transformers += preprocess
 
     train_transform = transforms.Compose(train_transformers)
-    if args.dataset in ['IMAGENET']:
-        test_transformers += [transforms.Resize(256, 256),
+    if args.dataset in ['IMAGENET', 'IMAGENETSUBSET']:
+        test_transformers += [transforms.Resize((256, 256)),
                               transforms.CenterCrop(224)]
     test_transformers += preprocess
     test_transform = transforms.Compose(test_transformers)
 
-    if args.dataset == 'IMAGENET':
+    if args.dataset in ['IMAGENET', 'IMAGENETSUBSET']:
         fulldataset = datasets.ImageFolder(
             join(data_dir, 'train'), train_transform)
     else:
@@ -85,7 +89,7 @@ def prepare_dataloader(args):
     valloader = DataLoader(valdataset, batch_size=batch_size, shuffle=False,
                            num_workers=2, pin_memory=True)
 
-    if args.dataset == 'IMAGENET':
+    if args.dataset in ['IMAGENET', 'IMAGENETSUBSET']:
         testdataset = datasets.ImageFolder(
             join(data_dir, 'val'), transform=test_transform)
     else:
